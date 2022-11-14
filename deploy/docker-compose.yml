@@ -1,0 +1,89 @@
+version: '3.9'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: ./deploy/Dockerfile
+    image: cloud_api:${CLOUD_API_VERSION:-latest}
+    restart: always
+    env_file:
+    - .env
+    labels:
+      # Enables traefik for this container.
+    - traefik.enable=true
+    - traefik.http.routers.cloud_api.rule=Host(`${CLOUD_API_TRAEFIK_HOST:-cloud_api.localhost}`)
+    - traefik.http.routers.cloud_api.entrypoints=http
+    - traefik.http.routers.cloud_api.service=cloud_api
+    - traefik.http.services.cloud_api.loadbalancer.server.port=${CLOUD_API_PORT:-8000}
+    networks:
+    - default
+    - traefik-shared
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rmq:
+        condition: service_healthy
+    environment:
+      CLOUD_API_HOST: 0.0.0.0
+      CLOUD_API_DB_HOST: cloud_api-db
+      CLOUD_API_DB_PORT: 5432
+      CLOUD_API_DB_USER: cloud_api
+      CLOUD_API_DB_PASS: cloud_api
+      CLOUD_API_DB_BASE: cloud_api
+      CLOUD_API_RABBIT_HOST: cloud_api-rmq
+
+  db:
+    image: postgres:13.8-bullseye
+    hostname: cloud_api-db
+    environment:
+      POSTGRES_PASSWORD: "cloud_api"
+      POSTGRES_USER: "cloud_api"
+      POSTGRES_DB: "cloud_api"
+    volumes:
+    - cloud_api-db-data:/var/lib/postgresql/data
+    restart: always
+    healthcheck:
+      test: pg_isready -U cloud_api
+      interval: 2s
+      timeout: 3s
+      retries: 40
+
+  redis:
+    image: bitnami/redis:6.2.5
+    hostname: "cloud_api-redis"
+    restart: always
+    environment:
+      ALLOW_EMPTY_PASSWORD: "yes"
+    healthcheck:
+      test: redis-cli ping
+      interval: 1s
+      timeout: 3s
+      retries: 50
+
+  rmq:
+    image: rabbitmq:3.9.16-alpine
+    hostname: "cloud_api-rmq"
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: "guest"
+      RABBITMQ_DEFAULT_PASS: "guest"
+      RABBITMQ_DEFAULT_VHOST: "/"
+    healthcheck:
+      test: rabbitmq-diagnostics check_running -q
+      interval: 3s
+      timeout: 3s
+      retries: 50
+
+
+
+volumes:
+  cloud_api-db-data:
+    name: cloud_api-db-data
+
+networks:
+  # Network for traefik.
+  traefik-shared:
+    name: traefik-shared

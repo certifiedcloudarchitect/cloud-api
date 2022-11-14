@@ -1,0 +1,44 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: cloud-api
+  name: cloud-api-db
+spec:
+  selector:
+    matchLabels:
+      app: cloud-api-db
+  template:
+    metadata:
+      labels:
+        app: cloud-api-db
+    spec:
+      containers:
+      - name: database
+        image: postgres:13.8-bullseye
+        resources:
+          limits:
+            memory: "300Mi"
+            cpu: "200m"
+        env:
+        - name: POSTGRES_PASSWORD
+          value: "cloud_api"
+        - name: POSTGRES_USER
+          value: "cloud_api"
+        - name: POSTGRES_DB
+          value: "cloud_api"
+        ports:
+        - containerPort: 5432
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: cloud-api
+  name: "cloud-api-db-service"
+spec:
+  selector:
+    app: cloud-api-db
+  ports:
+  - port: 5432
+    targetPort: 5432
+---
